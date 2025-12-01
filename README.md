@@ -39,10 +39,41 @@ Eklamon (a wrist-worn blood pressure prediction device) uses the **MAX30102 sens
 
 
 ## **ML Model Summary**
+The machine learning pipeline for blood pressure prediction is built using a RandomForestRegressor model with Optuna-based hyperparameter tuning.  
+The workflow includes data collection, preprocessing, feature extraction, model training, evaluation, and deployment to a Flask server.
 
-## **Usage Instruction**
+### **Data Processing Pipeline**
+1. **PPG Data Collection**  
+   Raw IR and RED signals are collected from the MAX30102 sensor.
+
+2. **Signal Preprocessing**  
+   - DC removal  
+   - Bandpass filtering  
+   - Normalization  
+
+3. **Feature Extraction & Labeling**  
+   Statistical and morphological features are extracted from the filtered PPG signals and paired with SBP/DBP labels.
+
+### **Model Training**
+- Algorithm: **RandomForestRegressor**  
+- Hyperparameter tuning: **Optuna**  
+- Targets predicted: **SBP**, **DBP**, and **Pulse**
+
+### **Model Evaluation**
+The model is evaluated using metrics such as:  
+- **MAE (Mean Absolute Error)**  
+- **R² Score**  
+- Additional validation checks
+
+The best-performing model is exported as a **`.pkl` file** for deployment.
+
+### **Deployment**
+The final model (`model.pkl`) is deployed on a Flask server, accessed via an API endpoint.  
+The microcontroller sends PPG features to this endpoint and receives predicted BP values in return.
+
+
 
 ## **Collaborators & Roles**
 - Siti Nurhaliza (me) — Team lead, electrical engineer, ML engineer
 - Nabila Fairuz Romadhona — ML lead, model deployment engineer
-- Angeline Annabelle Kacaribu — Clinical data acquisition, 3D Designer
+- Angeline Annabelle Kacaribu — Clinical data acquisition, 3D designer
