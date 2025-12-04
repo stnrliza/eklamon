@@ -76,60 +76,79 @@ void sendToServer(String csvContent) {
     return;
   }
 
+  // === CEK CSV SIZE ===
+  int csvSize = csvContent.length();
+  Serial.printf("[DEBUG] CSV size: %d bytes\n", csvSize);
+
+  if (csvSize > 45000) {
+    Serial.println("[ERROR] CSV terlalu besar! Upload dibatalkan.");
+    showCenteredText("CSV terlalu besar", "Gagal upload");
+    return;
+  }
+
   HTTPClient http;
   String endpoint = "http://" + String(serverIP) + ":" + String(serverPort) + "/upload";
   http.begin(endpoint);
+
   http.addHeader("Content-Type", "text/csv");
+  http.addHeader("Content-Length", String(csvSize));
   http.setTimeout(30000);
 
   Serial.println("[HTTP] Uploading CSV to " + endpoint);
-  Serial.printf("[HTTP] Data size: %d bytes\n", csvContent.length());
+
   int httpCode = http.POST(csvContent);
 
-  if (httpCode > 0) {
-    Serial.printf("[HTTP] Response Code: %d\n", httpCode);
-    String payload = http.getString();
-    Serial.println("[HTTP] Raw Payload:");
-    Serial.println(payload);
-
-    // ==== Parsing JSON prediksi ====
-    DynamicJsonDocument doc(4096);
-    DeserializationError error = deserializeJson(doc, payload);
-    if (error) {
-      Serial.print("[Error] JSON parsing failed: ");
-      Serial.println(error.c_str());
-      showCenteredText("Prediksi gagal", "JSON error");
-      return;
-    }
-
-    if (doc["status"] == "success") {
-      float sbp = doc["predictions"]["SBP"] | 0;
-      float dbp = doc["predictions"]["DBP"] | 0;
-      float pulse = doc["predictions"]["Pulse"] | 0;
-
-      Serial.printf("[Result] SBP: %.2f | DBP: %.2f | Pulse: %.2f\n", sbp, dbp, pulse);
-
-      display.clearDisplay();
-      display.setTextColor(SSD1306_WHITE);
-      display.setTextSize(1);
-      display.setCursor(0, 10);
-      display.println("Prediksi:");
-      display.setCursor(0, 25);
-      display.printf("SBP: %.1f", sbp);
-      display.setCursor(0, 35);
-      display.printf("DBP: %.1f", dbp);
-      display.setCursor(0, 45);
-      display.printf("Pulse: %.1f", pulse);
-      display.display();
-      delay(6000);
-    } else {
-      showCenteredText("Prediksi gagal", "Resp invalid");
-      Serial.println("[Error] Invalid or failed prediction response.");
-    }
-  } else {
-    Serial.printf("[HTTP] POST failed, error: %d\n", httpCode);
-    showCenteredText("Upload gagal", "Server error");
+  // === DEBUG JIKA ERROR ===
+  if (httpCode <= 0) {
+    Serial.printf("[HTTP] POST failed: %d\n", httpCode);
+    Serial.println("[HTTP] Detail: " + http.errorToString(httpCode));
+    showCenteredText("Upload gagal", "HTTP error");
+    http.end();
+    return;
   }
+
+  Serial.printf("[HTTP] Response Code: %d\n", httpCode);
+  String payload = http.getString();
+  Serial.println("[HTTP] Raw Payload:");
+  Serial.println(payload);
+
+  // Parsing JSON
+  DynamicJsonDocument doc(4096);
+  DeserializationError error = deserializeJson(doc, payload);
+
+  if (error) {
+    Serial.print("[Error] JSON parsing failed: ");
+    Serial.println(error.c_str());
+    showCenteredText("Prediksi gagal", "JSON error");
+    http.end();
+    return;
+  }
+
+  // DEBUG struktur JSON
+  serializeJsonPretty(doc, Serial);
+
+  // FIX PARSING — gunakan as<float>()
+  float sbp   = doc["predictions"]["SBP"].as<float>();
+  float dbp   = doc["predictions"]["DBP"].as<float>();
+  float pulse = doc["predictions"]["Pulse"].as<float>();
+
+  Serial.printf("[Result] SBP: %.2f | DBP: %.2f | Pulse: %.2f\n", sbp, dbp, pulse);
+
+  // Tampilkan ke OLED
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0, 10);
+  display.println("Prediksi:");
+  display.setCursor(0, 25);
+  display.printf("SBP: %.1f", sbp);
+  display.setCursor(0, 35);
+  display.printf("DBP: %.1f", dbp);
+  display.setCursor(0, 45);
+  display.printf("Pulse: %.1f", pulse);
+  display.display();
+
+  delay(6000);
   http.end();
 }
 
@@ -144,12 +163,13 @@ void readAndSendData() {
 
   for (int i = 0; i < NUM_SAMPLES; i++) {
     while (millis() < nextSample) {
-      yield();  // agar WiFi tetap aktif
+      yield();
     }
 
     unsigned long t = millis() - startTime;
     long red = particleSensor.getRed();
     long ir = particleSensor.getIR();
+
     csv += String(t / 1000.0, 3) + "," + String(ir) + "," + String(red) + "\n";
 
     if (i % 50 == 0) {
@@ -179,6 +199,7 @@ void setup() {
     Serial.println("[OLED] Initialization failed.");
     while (true);
   }
+
   display.setRotation(2);
   showCenteredText("Inisialisasi...");
 
@@ -189,7 +210,7 @@ void setup() {
   }
 
   particleSensor.setup();
-  particleSensor.setSampleRate(125);
+  particleSensor.setSampleRate(25); 
   Serial.println("[Sensor] MAX30102 initialized successfully.");
 
   connectWiFi();
