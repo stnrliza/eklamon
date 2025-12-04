@@ -1,6 +1,7 @@
 # ================================================
 # server-flask.py
-# Flask Server + Preprocessing (Filtering & Normalisation) + Feature Extraction + RF Prediction
+# Flask Server + Preprocessing (Filtering & Normalisation)
+# + Feature Extraction + RF Prediction
 # ================================================
 
 from flask import Flask, request, jsonify
@@ -42,7 +43,7 @@ for key, path in MODEL_PATHS.items():
 def remove_dc(signal):
     return signal - np.mean(signal)
 
-def bandpass_filter(signal, fs=50, low=0.5, high=5.0, order=4):
+def bandpass_filter(signal, fs=25, low=0.5, high=5.0, order=4):
     nyq = 0.5 * fs
     b, a = butter(order, [low/nyq, high/nyq], btype='band')
     return filtfilt(b, a, signal)
@@ -51,7 +52,7 @@ def normalize_signal(signal):
     scaler = MinMaxScaler()
     return scaler.fit_transform(signal.reshape(-1, 1)).flatten()
 
-def extract_ppg_features(signal, time, fs=50):
+def extract_ppg_features(signal, time, fs=25):
     features = {}
     features["mean"] = np.mean(signal)
     features["median"] = np.median(signal)
@@ -88,18 +89,24 @@ def upload_csv():
         # Simpan data mentah
         filename = datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + ".csv"
         filepath = os.path.join(BASE_DIR, filename)
-        with open(filepath, "w") as f:
+        with open(filepath, "w", encoding="utf-8") as f:
             f.write(raw_data)
         print(f"[OK] Data tersimpan di {filepath}")
 
-        # ======== Proses Data ========
-        df = pd.read_csv(filepath)
+        # Baca CSV dengan aman (UTF-8 BOM-safe)
+        df = pd.read_csv(filepath, encoding="utf-8-sig")
         if "IR" not in df.columns:
             return jsonify({"status": "error", "message": "No IR column found"}), 400
 
-        # Filtering + Normalisasi
         ir = df["IR"].values
-        fs = 50
+
+        # Guard: sinyal IR flat → gagal
+        if np.all(ir == ir[0]):
+            return jsonify({"status": "error", "message": "IR signal flat"}), 400
+
+        # ======== Proses Data ========
+        fs = 25  # FIX: harus sama dengan ESP32
+
         ir_dc = remove_dc(ir)
         ir_filtered = bandpass_filter(ir_dc, fs)
         ir_norm = normalize_signal(ir_filtered)
@@ -118,7 +125,6 @@ def upload_csv():
         predictions = {}
         for key, model in MODELS.items():
             try:
-                # Pastikan kolom urutannya sama dengan model training
                 model_features = model.feature_names_in_ if hasattr(model, "feature_names_in_") else feature_df.columns
                 X_input = feature_df[model_features]
                 predictions[key] = float(model.predict(X_input)[0])
