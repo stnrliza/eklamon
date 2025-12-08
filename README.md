@@ -77,3 +77,11 @@ The microcontroller sends PPG features to this endpoint and receives predicted B
 - Siti Nurhaliza (me) — Team lead, electrical engineer, ML engineer
 - Nabila Fairuz Romadhona — ML lead, model deployment engineer
 - Angeline Annabelle Kacaribu — Clinical data acquisition, 3D designer
+
+<details>
+   <summary> Things to try: </summary>
+   
+   - Implement OTA and Ngrok to enable seamless wireless firmware updates.
+   - Add a WiFi Manager to simplify network configuration and switching.
+   - Utilize Telnet to access the serial monitor while OTA was active.
+</details>
